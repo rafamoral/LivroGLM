@@ -892,3 +892,102 @@ print(sum(residuals(mod1, 'pearson')^2))
 anova(mod2, test = "Chisq")
 1-pchisq(deviance(mod2), df.residual(mod2))
 summary(mod2)
+
+########################################################################
+## 7.11 Pneumoconiose em mineiros de carvão
+########################################################################
+miners <- scan("Miners.dat", what = list(N = 0, M = 0, S = 0)) %>% as_tibble
+
+miners <- miners %>%
+  mutate(MS = M + S,
+         Total = N + M + S,
+         Ano_fator = factor(1:8),
+         Ano = c(5.8,15,21.5,27.5,33.5,39.5,46,51.5))
+
+miners_long <- miners %>%
+  pivot_longer(1:3,
+               names_to = "Categoria",
+               values_to = "Contagens") %>%
+  mutate(Categoria = factor(Categoria, levels = c("N","M","S")))
+
+plot1 <- miners_long %>%
+  ggplot(aes(x = Ano, y = Contagens/Total)) +
+  theme_bw() +
+  geom_point(aes(pch = Categoria)) +
+  geom_line(aes(lty = Categoria)) +
+  xlab("Número de anos de exposição") +
+  ylab("Proporções de mineiros de carvão") +
+  ggtitle("(a)") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+plot2 <- miners %>%
+  pivot_longer(2:3,
+               names_to = "Categoria",
+               values_to = "Contagens") %>%
+  ggplot(aes(x = log(Ano), y = log(Contagens/N + .01))) +
+  theme_bw() +
+  geom_point(aes(pch = Categoria)) +
+  geom_line(aes(lty = Categoria)) +
+  xlab("log(Número de anos de exposição + 0.01)") +
+  ylab("Logitos empíricos") +
+  ggtitle("(b)") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+library(gridExtra)
+pdf("Fig_mineiros_exploratorio.pdf", w = 10, h = 4)
+grid.arrange(plot1, plot2, ncol = 2)
+dev.off()
+
+# modelo nulo multinomial (reproduz totais marginais de ano e categoria)
+mod1 <- glm(Contagens ~ Ano_fator + Categoria,
+            family = poisson,
+            data = miners_long) # mod indep.
+summary(mod1)
+
+mod2 <- glm(Contagens ~ Ano_fator + Categoria * log(Ano),
+            family = poisson,
+            data = miners_long)
+anova(mod1, mod2, test = "Chisq")
+summary(mod2)
+
+library(hnp)
+set.seed(1234)
+hnp1 <- hnp(mod1)
+hnp2 <- hnp(mod2)
+
+pdf("mineiros_hnp.pdf", w = 12, h = 6)
+par(mfrow = c(1,2))
+plot(hnp1, xlab = "Quantis da distribuição meio-normal",
+    ylab = "Resíduos componentes do desvio", main = "(a)", pch = 16, cex = .7)
+plot(hnp2, xlab = "Quantis da distribuição meio-normal",
+     ylab = "Resíduos componentes do desvio", main = "(b)", pch = 16, cex = .7)
+dev.off()
+
+## curvas preditas
+miners_long$pred1 <- predict(mod1, type = "response")/miners_long$Total
+miners_long$pred2 <- predict(mod2, type = "response")/miners_long$Total
+
+plot1_pred <- miners_long %>%
+  ggplot(aes(x = Ano, y = Contagens/Total)) +
+  theme_bw() +
+  geom_point(aes(pch = Categoria)) +
+  geom_line(aes(y = pred1, lty = Categoria)) +
+  xlab("Número de anos de exposição") +
+  ylab("Proporções de mineiros de carvão") +
+  ggtitle("(a)") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+plot2_pred <- miners_long %>%
+  ggplot(aes(x = Ano, y = Contagens/Total)) +
+  theme_bw() +
+  geom_point(aes(pch = Categoria)) +
+  geom_line(aes(y = pred2, lty = Categoria)) +
+  xlab("Número de anos de exposição") +
+  ylab("Proporções de mineiros de carvão") +
+  ggtitle("(b)") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+library(gridExtra)
+pdf("Fig_mineiros_predito.pdf", w = 10, h = 4)
+grid.arrange(plot1_pred, plot2_pred, ncol = 2)
+dev.off()
